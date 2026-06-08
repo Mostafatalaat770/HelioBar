@@ -40,7 +40,19 @@ Most of this is pure `HelioCore` (testable) or self-contained UI.
 
 **The handshake works end-to-end against the real strap** (`./scripts/zepp-spike.sh` → AUTH OK).
 Path B is proven: the full ZeppOS auth (B-163 ECDH + AES + chunked transport) is implemented in
-HelioCore (verified) and authenticated locally. Phase 2 is unblocked. See the spike plan.
+HelioCore (verified) and authenticated locally.
+
+## Phase 2 — FIRST REAL DATA FETCHED ✅ (2026-06-08)
+
+**`./scripts/zepp-spike.sh` fetched 99 days of resting-HR history, 100% local, CRC-validated.**
+The legacy activity-fetch protocol (0x0004/0x0005) works: 594 bytes = 99 × 6-byte records,
+device CRC matched ours, values physiologically correct (46–53 bpm daily resting HR). Auth +
+fetch are both proven on hardware. The remaining metrics are now *just parsers* on the same
+fetch loop:
+- Easy (same record-style fetch): SpO2 (0x25), stress (0x13), respiratory rate (0x38), temp (0x2e)
+- HRV: lives in the ACTIVITY stream (0x01) — needs the activity-sample binary parser
+- Then **productionize**: a `RichBiometricsMonitor` in the app feeding `HealthStore`, with
+  Tier-1 BPM as the live fallback (recovery score = resting HR + HRV).
 
 | # | Item | Effort | Notes |
 |---|---|---|---|

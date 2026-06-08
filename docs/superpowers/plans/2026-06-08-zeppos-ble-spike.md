@@ -109,6 +109,17 @@ disconnected. The verbose `→/←` byte trace shows exactly where it stops.
   This is a separate protocol from auth — a focused follow-up, gated on reading
   `AbstractFetchOperation` + `FetchHeartRateRestingOperation`.
 
+### ✅ RESTING-HR FETCH WORKS (2026-06-08) — SPIKE FULLY COMPLETE
+`./scripts/zepp-spike.sh` fetched **99 days of resting HR**, 100% local, on the first run:
+device reported 594 bytes (= 99 × 6), streamed counter-prefixed packets over 0x0005, the
+device CRC32 matched ours, and the parsed values are physiologically correct (46–53 bpm daily).
+Implemented in `HuamiActivityFetch` (HelioCore, tested): start/fetch/ack commands, the
+MINUTES-precision since-timestamp, control-response parser, 6-byte resting-HR record parser.
+
+**Remaining metrics = parsers on the same loop:** swap the data type (SpO2 0x25, stress 0x13,
+respiratory 0x38, temp 0x2e) + write its record parser; HRV needs the ACTIVITY (0x01) stream
+parser. Then productionize as a `RichBiometricsMonitor` in the app (see ROADMAP Phase 2).
+
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):
 
