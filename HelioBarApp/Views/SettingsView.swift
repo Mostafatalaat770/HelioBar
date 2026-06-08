@@ -13,6 +13,7 @@ struct SettingsView: View {
     @AppStorage("lowHRDurationMin") private var lowHRDurationMin = 2
     @AppStorage("batteryAlertEnabled") private var batteryAlertEnabled = true
     @AppStorage("batteryAlertThreshold") private var batteryAlertThreshold = 20
+    @AppStorage("breathPaceSeconds") private var breathPaceSeconds = 4
     @AppStorage("autoUpdateCheck") private var autoUpdateCheck = true
     let updater: UpdateChecker
     @State private var launchAtLogin = Self.isLaunchOn
@@ -53,6 +54,17 @@ struct SettingsView: View {
                 Stepper("At or below \(batteryAlertThreshold)%", value: $batteryAlertThreshold, in: 5...50, step: 5)
             } header: {
                 Label("Strap battery alert", systemImage: "battery.25percent")
+            }
+            Section {
+                Picker("Pace", selection: $breathPaceSeconds) {
+                    Text("Relaxed · 4s (7.5/min)").tag(4)
+                    Text("Coherence · 5s (6/min)").tag(5)
+                    Text("Slow · 6s (5/min)").tag(6)
+                }
+                Text("Coherence (~6 breaths/min) is the pace associated with the biggest HRV rise.")
+                    .font(.caption).foregroundStyle(.secondary)
+            } header: {
+                Label("Breathing", systemImage: "wind")
             }
             Section {
                 Toggle("Check for updates automatically", isOn: $autoUpdateCheck)

@@ -9,7 +9,7 @@ struct BreathingView: View {
     @State private var inhaling = false
     @State private var session = BreathingSession()
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+    @AppStorage("breathPaceSeconds") private var paceSeconds = 4   // inhale = exhale seconds
 
     /// Orb diameter. Fixed (no pulsing) when the user prefers reduced motion.
     private var orbSize: CGFloat { reduceMotion ? 115 : (inhaling ? 150 : 80) }
@@ -35,7 +35,7 @@ struct BreathingView: View {
             }
             .frame(width: orbSize, height: orbSize)
             .shadow(color: Theme.resting.opacity(0.4), radius: 12)
-            .animation(reduceMotion ? nil : .easeInOut(duration: 4), value: inhaling)
+            .animation(reduceMotion ? nil : .easeInOut(duration: Double(paceSeconds)), value: inhaling)
             .frame(height: 160)   // reserve space so the popover doesn't jump
 
             VStack(spacing: 2) {
@@ -48,7 +48,12 @@ struct BreathingView: View {
             }
         }
         .onAppear { session.record(hr: store.liveHR); inhaling = true }
-        .onReceive(timer) { _ in inhaling.toggle() }
+        .task(id: paceSeconds) {   // restarts cleanly when the pace changes
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(Double(paceSeconds)))
+                inhaling.toggle()
+            }
+        }
         .onChange(of: store.liveHR) { _, hr in session.record(hr: hr) }
     }
 }
