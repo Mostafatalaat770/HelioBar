@@ -52,14 +52,16 @@ The hardware-independent half of the handshake is done, in `HelioCore/Sources/He
 (pure + unit-tested, rather than a throwaway CLI, so it can graduate straight into Phase 2):
 - `AESECB` — AES-128-ECB, checked against the FIPS-197 vector.
 - `GF163` — GF(2^163) field, checked against hand-computed reductions + the known x⁻¹.
-- `Sect163k1` — curve point ops + ECDH. Fast tests (group law, small-scalar ECDH symmetry)
-  run by default; the rigorous full-size proofs (**n·G = ∞**, full-scalar ECDH symmetry) are
-  opt-in to keep `swift test` fast:
+- `B163` — curve point ops + ECDH. **Important correction:** Gadgetbridge's `ECDH_B163.java`
+  showed the curve is **B-163 / sect163r2** (a=1, specific b + base point + order), NOT the
+  Koblitz K-163/sect163k1 first assumed. The field is identical (same reduction poly), and b
+  doesn't appear in add/double, so only the domain constants changed. Keys are 24-byte LE
+  scalars; public keys / shared secrets are 48 bytes = x‖y (24-byte LE each), matching
+  `ECDH_B163`. Fast structural tests run by default; the rigorous **n·G = ∞** proof of the
+  B-163 params is opt-in:
   ```
-  RUN_EC_SLOW_TESTS=1 swift test --filter Sect163k1Tests
+  RUN_EC_SLOW_TESTS=1 swift test --filter B163Tests
   ```
-  (Note: affine coords → the full-size proofs take ~25s. If Phase 2 needs faster auth, switch
-  scalarMul to López–Dahab projective to cut per-step inversions.)
 
 - `Huami2021Chunked` — the chunked transfer framing over `0x0016/0x0017` (from the
   Gadgetbridge `Huami2021ChunkedEncoder`). Encoder + reassembling decoder, round-trip tested.
