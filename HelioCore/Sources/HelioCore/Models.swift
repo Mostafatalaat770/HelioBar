@@ -15,6 +15,13 @@ public enum HRZone: String, Sendable {
     }
 }
 
+/// Estimated maximum heart rate for an age (the common `220 − age` formula),
+/// floored at 120 so very high ages still yield sane zones. Single source of
+/// truth: both the menu-bar app and the Settings readout call this.
+public func maxHR(forAge age: Int) -> Int {
+    Swift.max(120, 220 - age)
+}
+
 /// Heart-rate source freshness for honest UI rendering.
 public enum SourceStatus: Equatable, Sendable {
     case idle               // never received data

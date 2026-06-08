@@ -3,6 +3,15 @@ import Foundation
 public enum BatteryEstimate: Equatable, Sendable {
     case calibrating
     case ready(TimeInterval)
+
+    /// Human-readable "time left" for a remaining interval: days at/above 48h,
+    /// whole hours above 1h, "<1h" otherwise. Negative input clamps to "<1h".
+    public static func formatRemaining(_ remaining: TimeInterval) -> String {
+        let hours = Swift.max(0, Int(floor(remaining / 3600)))
+        if hours >= 48 { return "\(Int((Double(hours) / 24).rounded()))d" }
+        if hours >= 1  { return "\(hours)h" }
+        return "<1h"
+    }
 }
 
 public struct BatterySample: Equatable, Sendable {
