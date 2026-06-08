@@ -56,4 +56,35 @@ final class Huami2021ChunkedTests: XCTestCase {
         XCTAssertEqual(out?.type, 0x0010)
         XCTAssertEqual(out?.payload, payload)
     }
+
+    func test_crc32KnownVector() {
+        // The canonical CRC-32 check value for the ASCII string "123456789".
+        XCTAssertEqual(CRC32.checksum(Array("123456789".utf8)[...]), 0xCBF4_3926)
+    }
+
+    func test_encryptedRoundTrip() {
+        let sessionKey = (0..<16).map { UInt8(0x10 + $0) }
+        let payload = (0..<40).map { UInt8(($0 * 5 + 1) & 0xff) }
+        let chunks = Huami2021Chunked.encode(type: 0x0003, handle: 0x07, payload: payload,
+                                             mtu: 247, extendedFlags: true,
+                                             encrypt: true, sessionKey: sessionKey,
+                                             sequenceNumber: 42)
+        // ciphertext is padded to a 16-byte boundary, so longer than the plaintext
+        XCTAssertGreaterThan(chunks[0].count - 11, payload.count)
+
+        var decoder = Huami2021Chunked.Decoder(extendedFlags: true, sessionKey: sessionKey)
+        var out: (type: UInt16, payload: [UInt8])?
+        for chunk in chunks { out = decoder.receive(chunk) }
+        XCTAssertEqual(out?.type, 0x0003)
+        XCTAssertEqual(out?.payload, payload)         // decrypts + strips seqNo/CRC/padding
+    }
+
+    func test_encryptedDecodeFailsWithoutKey() {
+        let sessionKey = (0..<16).map { UInt8($0) }
+        let chunks = Huami2021Chunked.encode(type: 0x0003, handle: 0x07, payload: [1, 2, 3],
+                                             mtu: 247, extendedFlags: true,
+                                             encrypt: true, sessionKey: sessionKey)
+        var decoder = Huami2021Chunked.Decoder(extendedFlags: true)   // no key
+        XCTAssertNil(decoder.receive(chunks[0]))
+    }
 }
