@@ -74,7 +74,13 @@ sessionKey[i] ^ writeHandle`; payload wrapped as `seqNo(4) + data + crc32(4)`, p
 AES-encrypted. The ECDH auth exchange itself is sent *unencrypted* (sessionKey not yet known),
 which is why the unencrypted framing above is what we need first.
 
-### Step 3 — CLI BUILT, READY TO RUN (2026-06-08)
+### Step 3 — ✅ HANDSHAKE SUCCEEDS (2026-06-08) — SPIKE COMPLETE
+`./scripts/zepp-spike.sh` authenticated against the real strap end-to-end (`← …10 05 01`).
+Path B is proven: B-163 ECDH + AES + chunked transport + the auth sequence all work, 100%
+local. The only bug was a `0x`-prefix in the `.env` key that the parser mis-read (the `0`
+became a nibble and shifted every byte) — fixed by stripping `0x`. The CLI also discovers the
+chunked chars under **FEE0** (not FEE1) and reads the negotiated MTU (247) after notify is on.
+
 The full handshake is implemented (ported from `InitOperation2021`): auth endpoint `0x0082`,
 `RESPONSE=0x10`/`SUCCESS=0x01`, extended-flags chunked framing, unencrypted.
 - `HuamiAuth` (HelioCore, tested): `04 02 00 02` + pubkey → parse remote random(16)+key(48) →

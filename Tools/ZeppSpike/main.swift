@@ -24,16 +24,21 @@ func loadAuthKey() -> [UInt8]? {
     else if let file = try? String(contentsOfFile: ".env", encoding: .utf8) {
         raw = file.split(separator: "\n").first { $0.hasPrefix("KEY=") }.map { String($0.dropFirst(4)) }
     }
-    guard let raw else { return nil }
-    let nibbles = raw.compactMap { $0.hexDigitValue.map { UInt8($0) } }   // drops quotes/CR/spaces
-    guard nibbles.count >= 32 else { return nil }
-    return stride(from: 0, to: 32, by: 2).map { nibbles[$0] << 4 | nibbles[$0 + 1] }
+    guard var s = raw?.trimmingCharacters(in: .whitespacesAndNewlines) else { return nil }
+    if s.hasPrefix("0x") || s.hasPrefix("0X") { s = String(s.dropFirst(2)) }
+    let nibbles = s.compactMap { $0.hexDigitValue }   // drops quotes/CR/colons/spaces
+    log("Auth key: \(nibbles.count) hex digits parsed (expect 32)")
+    guard nibbles.count == 32 else { return nil }
+    return stride(from: 0, to: 32, by: 2).map { UInt8(nibbles[$0] << 4 | nibbles[$0 + 1]) }
 }
 
 final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var central: CBCentralManager!
     private var peripheral: CBPeripheral?
     private var writeChar: CBCharacteristic?
+    private var readChar: CBCharacteristic?
+    private var notifyRequested = false
+    private var handshakeStarted = false
     private let auth: HuamiAuth
     private var decoder = Huami2021Chunked.Decoder(extendedFlags: true)
     private var writeHandle: UInt8 = 0
@@ -59,24 +64,30 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func centralManager(_ c: CBCentralManager, didConnect p: CBPeripheral) {
-        mtu = p.maximumWriteValueLength(for: .withoutResponse) + 3
-        log("Connected (write MTU \(mtu)). Discovering services…")
-        p.discoverServices([authService])
+        log("Connected. Discovering all services…")
+        p.discoverServices(nil)          // chunked chars may be under FEE0, not FEE1
     }
 
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
-        for s in p.services ?? [] where s.uuid == authService {
-            p.discoverCharacteristics([chunkedWrite, chunkedRead], for: s)
-        }
+        for s in p.services ?? [] { p.discoverCharacteristics(nil, for: s) }
     }
 
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) {
         for ch in s.characteristics ?? [] {
-            if ch.uuid == chunkedWrite { writeChar = ch }
-            if ch.uuid == chunkedRead { p.setNotifyValue(true, for: ch) }
+            if ch.uuid == chunkedWrite { writeChar = ch; log("Found 0x0016 (write) under \(s.uuid)") }
+            if ch.uuid == chunkedRead { readChar = ch; log("Found 0x0017 (notify) under \(s.uuid)") }
         }
-        guard writeChar != nil else { log("0x0016 not found"); exit(1) }
-        log("Sending our public key…")
+        if let r = readChar, writeChar != nil, !notifyRequested {
+            notifyRequested = true
+            p.setNotifyValue(true, for: r)   // wait for confirmation before sending
+        }
+    }
+
+    func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor ch: CBCharacteristic, error: Error?) {
+        guard ch.uuid == chunkedRead, ch.isNotifying, !handshakeStarted else { return }
+        handshakeStarted = true
+        mtu = p.maximumWriteValueLength(for: .withoutResponse) + 3   // negotiated by now
+        log("Notify on (write MTU \(mtu)). Sending our public key…")
         send(payload: auth.sendPublicKeyPayload())
     }
 

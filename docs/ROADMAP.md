@@ -36,9 +36,11 @@ Most of this is pure `HelioCore` (testable) or self-contained UI.
 | 0.8 | **Accessibility pass** | Views | M | low | VoiceOver labels; honor Reduce Motion in PulsingHeart/Breathing |
 | 0.9 | **Onboarding / first-run** | App | M | low | Guide "enable Heart Rate Push in Zepp" + permission priming |
 
-## Phase 1 — De-risk Tier 2 (the BLE spike)
+## Phase 1 — De-risk Tier 2 (the BLE spike) — ✅ DONE (2026-06-08)
 
-Cheap, high-information. **Gate Phase 2 on this.** Full checklist in the spike plan.
+**The handshake works end-to-end against the real strap** (`./scripts/zepp-spike.sh` → AUTH OK).
+Path B is proven: the full ZeppOS auth (B-163 ECDH + AES + chunked transport) is implemented in
+HelioCore (verified) and authenticated locally. Phase 2 is unblocked. See the spike plan.
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
