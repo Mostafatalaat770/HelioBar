@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import HelioCore
 
 struct SettingsView: View {
     @AppStorage("age") private var age = 30
@@ -10,14 +11,15 @@ struct SettingsView: View {
     @AppStorage("batteryAlertThreshold") private var batteryAlertThreshold = 20
     @AppStorage("autoUpdateCheck") private var autoUpdateCheck = true
     let updater: UpdateChecker
-    @State private var launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    @State private var launchAtLogin = Self.isLaunchOn
+    @State private var needsApproval = (SMAppService.mainApp.status == .requiresApproval)
     @State private var launchAtLoginError: String?
 
     var body: some View {
         Form {
             Section {
                 Stepper("Age: \(age)", value: $age, in: 10...100)
-                Text("Max HR ≈ \(220 - age) bpm · zones scale to this")
+                Text("Max HR ≈ \(maxHR(forAge: age)) bpm · zones scale to this")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Label("You", systemImage: "person.fill")
@@ -46,8 +48,19 @@ struct SettingsView: View {
                 Label("Updates", systemImage: "arrow.down.circle")
             }
             Section {
-                Toggle("Launch at login", isOn: $launchAtLogin)
-                    .onChange(of: launchAtLogin) { _, on in setLaunch(on) }
+                // Custom binding so only user taps drive register/unregister;
+                // a programmatic refresh of `launchAtLogin` must not re-fire it.
+                Toggle("Launch at login", isOn: Binding(
+                    get: { launchAtLogin },
+                    set: { setLaunch($0) }))
+                if needsApproval {
+                    Text("Approve HelioBar in Login Items to finish enabling this.")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Button("Open Login Items") {
+                        SMAppService.openSystemSettingsLoginItems()
+                    }
+                    .controlSize(.small)
+                }
                 if let launchAtLoginError {
                     Text(launchAtLoginError).font(.caption).foregroundStyle(.red)
                 }
@@ -57,6 +70,14 @@ struct SettingsView: View {
         }
         .formStyle(.grouped)
         .frame(width: 330, height: 400)
+        .onAppear(perform: refreshLaunchStatus)
+    }
+
+    /// Treat "requires approval" as on: the user opted in; macOS just needs a
+    /// confirmation in System Settings before it takes effect.
+    private static var isLaunchOn: Bool {
+        let status = SMAppService.mainApp.status
+        return status == .enabled || status == .requiresApproval
     }
 
     private var updateStatusText: String {
@@ -79,10 +100,18 @@ struct SettingsView: View {
             if on { try SMAppService.mainApp.register() }
             else  { try SMAppService.mainApp.unregister() }
             launchAtLoginError = nil
-            launchAtLogin = (SMAppService.mainApp.status == .enabled)
         } catch {
-            launchAtLogin = (SMAppService.mainApp.status == .enabled)
             launchAtLoginError = error.localizedDescription
         }
+        refreshLaunchStatus()
+    }
+
+    /// Reflect the live SMAppService state. `.requiresApproval` keeps the toggle
+    /// on (the user opted in) and shows the approval hint instead of silently
+    /// bouncing the toggle back off.
+    private func refreshLaunchStatus() {
+        let status = SMAppService.mainApp.status
+        needsApproval = (status == .requiresApproval)
+        launchAtLogin = (status == .enabled || status == .requiresApproval)
     }
 }

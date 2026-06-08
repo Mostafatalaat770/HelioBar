@@ -35,8 +35,12 @@ final class UpdateChecker {
     /// Auto-check entry point: respects the toggle and the 24h gate.
     func checkIfDue() async {
         let autoEnabled = (defaults.object(forKey: autoKey) as? Bool) ?? true
-        guard autoEnabled else { return }
-        if let last = lastChecked, Date().timeIntervalSince(last) < dayInterval { return }
+        guard UpdatePolicy.shouldAutoCheck(
+            autoEnabled: autoEnabled,
+            lastChecked: lastChecked,
+            now: Date(),
+            interval: dayInterval
+        ) else { return }
         await performCheck()
     }
 
@@ -68,7 +72,11 @@ final class UpdateChecker {
             }
             let release = try JSONDecoder().decode(LatestRelease.self, from: data)
             let dismissed = defaults.string(forKey: dismissedKey)
-            if isVersion(release.version, newerThan: currentVersion), release.version != dismissed {
+            if UpdatePolicy.shouldSurface(
+                fetchedVersion: release.version,
+                currentVersion: currentVersion,
+                dismissedVersion: dismissed
+            ) {
                 available = release
                 status = .idle
             } else {

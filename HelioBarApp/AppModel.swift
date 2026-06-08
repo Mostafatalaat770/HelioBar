@@ -48,7 +48,7 @@ final class AppModel {
     private func applyPrefs() {
         let d = UserDefaults.standard
         let age = (d.object(forKey: "age") as? Int) ?? 30
-        store.maxHR = Swift.max(120, 220 - age)
+        store.maxHR = maxHR(forAge: age)
         alertEngine.config = ElevatedHRConfig(
             enabled: d.bool(forKey: "alertEnabled"),
             threshold: (d.object(forKey: "alertThreshold") as? Int) ?? 100,

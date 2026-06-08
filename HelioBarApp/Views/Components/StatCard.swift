@@ -9,7 +9,7 @@ struct StatCard: View {
     var body: some View {
         VStack(spacing: 3) {
             Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .font(Theme.rounded(10, weight: .semibold))
                 .foregroundStyle(.tertiary)
             Text(value.map(String.init) ?? "—")
                 .font(Theme.statValueFont)

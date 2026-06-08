@@ -38,7 +38,7 @@ struct ZoneBar: View {
     private func legend(_ text: String, _ color: Color) -> some View {
         HStack(spacing: 4) {
             RoundedRectangle(cornerRadius: 2).fill(color).frame(width: 7, height: 7)
-            Text(text).font(.system(size: 10, design: .rounded)).foregroundStyle(.tertiary)
+            Text(text).font(Theme.rounded(10)).foregroundStyle(.tertiary)
         }
     }
 }

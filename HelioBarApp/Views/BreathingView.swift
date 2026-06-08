@@ -7,20 +7,19 @@ struct BreathingView: View {
     var onClose: () -> Void
 
     @State private var inhaling = false
-    @State private var startHR: Int?
-    @State private var lowHR: Int?
+    @State private var session = BreathingSession()
     private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: Theme.md) {
             HStack {
-                Text("Breathe").font(.system(size: 16, weight: .bold, design: .rounded))
+                Text("Breathe").font(Theme.rounded(16, weight: .bold))
                 Spacer()
                 Button("Done", action: onClose).controlSize(.small)
             }
 
             Text(inhaling ? "Inhale…" : "Exhale…")
-                .font(.system(size: 14, design: .rounded))
+                .font(Theme.rounded(14))
                 .foregroundStyle(.secondary)
 
             ZStack {
@@ -38,19 +37,15 @@ struct BreathingView: View {
             VStack(spacing: 2) {
                 Text(store.liveHR.map { "\($0) bpm" } ?? "—")
                     .font(Theme.bpmFont(26))
-                if let s = startHR, let l = lowHR {
-                    Text("start \(s) · low \(l) · ↓\(Swift.max(0, s - l))")
+                if let start = session.start, let low = session.low, let drop = session.drop {
+                    Text("start \(start) · low \(low) · ↓\(drop)")
                         .font(Theme.captionFont).foregroundStyle(.secondary)
                 }
             }
         }
-        .onAppear { startHR = store.liveHR; lowHR = store.liveHR; inhaling = true }
+        .onAppear { session.record(hr: store.liveHR); inhaling = true }
         .onReceive(timer) { _ in inhaling.toggle() }
-        .onChange(of: store.liveHR) { _, hr in
-            guard let hr else { return }
-            if startHR == nil { startHR = hr }
-            lowHR = Swift.min(lowHR ?? hr, hr)
-        }
+        .onChange(of: store.liveHR) { _, hr in session.record(hr: hr) }
     }
 }
 

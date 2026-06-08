@@ -27,7 +27,7 @@ struct StatusBadge: View {
                 Circle().fill(color).frame(width: 7, height: 7)
                     .shadow(color: color, radius: 3)
             }
-            Text(text).font(.system(size: 12, weight: .semibold, design: .rounded))
+            Text(text).font(Theme.rounded(12, weight: .semibold))
                 .foregroundStyle(color)
         }
     }

@@ -9,10 +9,10 @@ struct BatteryPill: View {
     var body: some View {
         HStack(spacing: 9) {
             BatteryGlyph(percent: percent, color: color)
-            Text(label).font(.system(size: 13, design: .rounded)).foregroundStyle(.secondary)
+            Text(label).font(Theme.rounded(13)).foregroundStyle(.secondary)
             Spacer(minLength: 0)
             if let right = timeLeft {
-                Text(right).font(.system(size: 12, design: .rounded)).foregroundStyle(.tertiary)
+                Text(right).font(Theme.rounded(12)).foregroundStyle(.tertiary)
             }
         }
         .padding(.horizontal, 13)
@@ -34,15 +34,8 @@ struct BatteryPill: View {
         guard percent != nil else { return nil }
         switch estimate {
         case .calibrating:          return "calibrating"
-        case .ready(let remaining): return "~\(Self.formatRemaining(remaining)) left"
+        case .ready(let remaining): return "~\(BatteryEstimate.formatRemaining(remaining)) left"
         }
-    }
-
-    static func formatRemaining(_ remaining: TimeInterval) -> String {
-        let hours = Swift.max(0, Int(floor(remaining / 3600)))
-        if hours >= 48 { return "\(Int((Double(hours) / 24).rounded()))d" }
-        if hours >= 1  { return "\(hours)h" }
-        return "<1h"
     }
 }
 

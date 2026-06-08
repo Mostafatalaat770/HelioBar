@@ -13,9 +13,9 @@ struct UpdateBanner: View {
                 .foregroundStyle(.blue)
             VStack(alignment: .leading, spacing: 1) {
                 Text("HelioBar \(release.version) available")
-                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .font(Theme.rounded(12, weight: .semibold))
                 Button("Download", action: onDownload)
-                    .font(.system(size: 11, weight: .semibold, design: .rounded))
+                    .font(Theme.rounded(11, weight: .semibold))
                     .buttonStyle(.plain)
                     .foregroundStyle(.blue)
             }

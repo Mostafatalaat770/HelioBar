@@ -18,14 +18,6 @@ enum Theme {
         }
     }
 
-    /// Gradient sweep used by the HR ring (green → yellow-green → orange → red).
-    static let ringGradient: [Color] = [
-        resting,
-        Color(red: 0.62, green: 0.82, blue: 0.29),
-        elevated,
-        high,
-    ]
-
     // Spacing
     static let xs: CGFloat = 4
     static let sm: CGFloat = 8
@@ -39,12 +31,17 @@ enum Theme {
     static let pillRadius: CGFloat = 8
 
     // Typography
-    static func bpmFont(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .bold, design: .rounded).monospacedDigit()
+    /// The app's single rounded-font constructor. Every view routes through this
+    /// (or the named roles below) so size/weight choices stay centralized.
+    static func rounded(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
     }
-    static let statValueFont = Font.system(size: 20, weight: .bold, design: .rounded).monospacedDigit()
-    static let cardTitleFont = Font.system(size: 11, weight: .semibold, design: .rounded)
-    static let captionFont   = Font.system(size: 11, weight: .regular, design: .rounded)
+    static func bpmFont(_ size: CGFloat) -> Font {
+        rounded(size, weight: .bold).monospacedDigit()
+    }
+    static let statValueFont = rounded(20, weight: .bold).monospacedDigit()
+    static let cardTitleFont = rounded(11, weight: .semibold)
+    static let captionFont   = rounded(11)
 }
 
 extension View {

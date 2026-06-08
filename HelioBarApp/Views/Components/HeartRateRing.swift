@@ -49,7 +49,7 @@ struct HeartRateRing: View {
                     Text(bpm.map(String.init) ?? "—").font(Theme.bpmFont(52))
                     if bpm != nil {
                         Text("bpm")
-                            .font(.system(size: 15, weight: .bold, design: .rounded))
+                            .font(Theme.rounded(15, weight: .bold))
                             .foregroundStyle(.secondary)
                     }
                 }
@@ -58,7 +58,7 @@ struct HeartRateRing: View {
                         PulsingHeart(bpm: bpm, color: Theme.color(for: zone))
                             .font(.system(size: 13))
                         Text(centerSubtitle(percentMax))
-                            .font(.system(size: 14, weight: .bold, design: .rounded))
+                            .font(Theme.rounded(14, weight: .bold))
                             .foregroundStyle(Theme.color(for: zone))
                     }
                 }
