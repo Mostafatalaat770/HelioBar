@@ -1,6 +1,6 @@
 # HelioBar — Project Context & Development Handoff
 
-> Living document. Last updated: 2026-06-06.
+> Living document. Last updated: 2026-06-08.
 > Purpose: capture everything needed to continue HelioBar development in a future session
 > without re-deriving decisions. Read this first.
 
@@ -165,7 +165,8 @@ Posted on **r/AmazfitHelioStrap**. Notable threads:
   codesigns without `--entitlements`, so the SwiftPM-installed app runs **unsandboxed**
   (Bluetooth still works via the Info.plist usage key). Ideal fix: add
   `--entitlements "$repo_root/HelioBarApp/Resources/HelioBar.entitlements"` to the codesign
-  line. **This is still TODO.**
+  line. **DONE (commit `26bffcb`)** — `scripts/install-and-run.sh` now codesigns with the
+  sandbox + Bluetooth entitlements, so the CLT install runs sandboxed.
 - **Feature idea — smart alarm (u/mr-zeus-):** sleep-cycle wake-up like Whoop/Fitbit.
   Verdict: a *true* sleep-stage alarm needs sleep staging (motion + HRV) → not from the
   standard BLE BPM. But an **HR-trend-based wake-in-window** heuristic IS buildable from BPM
@@ -187,6 +188,26 @@ This is the most important research result and **corrects an earlier wrong assum
 service.** There is a **second, proprietary Huami/Zepp BLE protocol** (the one the Zepp app
 itself uses) that exposes the full biometric set **locally over BLE** — no cloud needed for
 the data itself.
+
+> **UPDATE 2026-06-08 — this path is now PROVEN, and Path B is the chosen direction.**
+> Research refresh found that **Gadgetbridge now fully supports the Amazfit Helio Strap**
+> (merged, confirmed working) and decodes **HRV, sleep phases, stress, SpO2, breathing,
+> steps, HR, battery** locally over BLE. So Tier 2 is no longer "fragile/unproven R&D" — it's
+> "port a proven reference."
+> - **Auth key:** obtained **once** via [`huami-token`](https://codeberg.org/argrento/huami-token)
+>   (log into the Zepp account with email/password → returns the device's BLE token), or from a
+>   rooted phone's Zepp DB (`AUTHKEY` in the `DEVICE` table). It stays valid **until you unpair
+>   from the Zepp app** — i.e. a *stable, one-time* extraction, far less fragile than the cloud
+>   `apptoken` we previously fought (which rotated every few minutes). This is "server-based
+>   pairing": the key is minted by Huami servers and cannot be chosen client-side.
+> - **HRV nuance:** what's exposed is **daily-average HRV**, NOT continuous beat-to-beat / RMSSD.
+>   Neither BLE path streams RR intervals, so "live HRV biofeedback" is impossible; "HRV trend +
+>   this-morning's reading + recovery score" is the realistic feature.
+> - **Reference order:** Gadgetbridge (canonical Java decode) > `kevdagoat/zepp-os-esphome`
+>   (ECDH sect163k1 + AES-ECB handshake, char `0x0016/0x0017`) > `a9eelsh/HelioCore` (same
+>   Swift/CoreBluetooth stack). See `docs/superpowers/plans/2026-06-08-zeppos-ble-spike.md`.
+> - **De-risk first:** run `./scripts/inspect-ble.sh` wearing the strap to confirm the
+>   proprietary ZeppOS service UUIDs are present on *this* device before writing crypto.
 
 ### Two BLE paths
 | | Standard HR service (HelioBar uses now) | Huami/Zepp proprietary protocol |
@@ -239,23 +260,26 @@ Good news: **`HelioCore` (the pure logic package) ports to iOS as-is.**
 
 ## 7. Open decisions & suggested next steps
 
-**Immediate, free, low-risk (good "anytime" wins):**
-- [ ] Add `--entitlements` to `scripts/install-and-run.sh` codesign line (PR #1 follow-up).
-- [ ] Add install GIF/screenshot to README (reduce Gatekeeper friction perception).
-- [ ] Add a GitHub Action for auto-release on tag push (ad-hoc signed).
+**DIRECTION CHOSEN (2026-06-08): Path B — go rich on Mac via the proprietary ZeppOS BLE
+protocol.** The full plan lives in `docs/ROADMAP.md`; the de-risking spike in
+`docs/superpowers/plans/2026-06-08-zeppos-ble-spike.md`.
 
-**The big directional decision (needs user call):**
-- [ ] **Path A — stay simple:** keep HelioBar BPM-only, rock-solid. Add the HR-trend
-      smart-alarm + polish.
-- [ ] **Path B — go rich on Mac (Huami protocol):** huge capability jump (HRV/SpO2/stress/
-      sleep/history), local, no $99 — but complex + fragile. **Recommended pre-work before
-      committing:** (a) read `a9eelsh/HelioCore` source to judge how solid/borrowable the BLE
-      handshake is; (b) pull the Gadgetbridge Huami protocol + auth-key extraction method to
-      size the one-time setup and its fragility.
-- [ ] **Path C — go mobile (iOS + HealthKit):** "real health companion," but forces $99 +
-      App Store + most work. First do the 5-min check: does Zepp write HRV/sleep-stages to
-      Apple Health on this device?
-- [ ] **Notarization ($99/yr):** HOLD until a real demand signal (see §4).
+**Immediate, free, low-risk (good "anytime" wins):**
+- [x] Add `--entitlements` to `scripts/install-and-run.sh` codesign line — DONE (`26bffcb`).
+- [ ] Add install GIF/screenshot to README (reduce Gatekeeper friction perception).
+- [ ] Add a GitHub Action for auto-release on tag push — **still no `.github/workflows/`.**
+
+**Why Path B over A/C (recorded so we don't relitigate):**
+- **vs Path A (stay BPM-only):** "we have the hardware" — leaving HRV/sleep/stress/SpO2 on the
+  table wastes the strap's real capability now that the decode is proven.
+- **vs Path C (iOS + HealthKit):** Path C forces $99/yr + App Store review + an iOS rewrite,
+  and Zepp's HealthKit write is partial. Path B stays 100% local, no fee, no store, and
+  `HelioCore` already runs on Mac. (Path C remains the fallback if BLE proves unworkable on
+  this device — `HelioCore` ports to iOS as-is.)
+
+**Still HOLD:**
+- [ ] **Notarization ($99/yr):** HOLD until a real demand signal (see §4). (Path B itself needs
+      no $99 — it's all local BLE.)
 
 **Note on the naming collision:** `a9eelsh/HelioCore` shares our package name. If we ever
 borrow/collaborate or publish, consider how to disambiguate.
