@@ -93,8 +93,21 @@ The full handshake is implemented (ported from `InitOperation2021`): auth endpoi
 pubkey in one chunk; check extended-flags vs not; whether the strap needs Zepp fully
 disconnected. The verbose `→/←` byte trace shows exactly where it stops.
 
-**After auth works → Phase 2 starts:** the encrypted-payload path (seqNo+CRC32+AES,
-`messageKey = sessionKey ^ writeHandle`) then the actual HRV/resting-HR fetch commands.
+### Phase 2 — data fetch (scoped 2026-06-08)
+- **Encrypted command channel (DONE + tested):** `Huami2021Chunked` now supports the encrypted
+  post-auth path (seqNo + CRC32 + AES, `messageKey = sessionKey ^ writeHandle`). Used for
+  config/realtime commands over `0x0016/0x0017`.
+- **Rich data is fetched over a DIFFERENT protocol: the legacy activity fetch on `0x0004`
+  (control) / `0x0005` (data)** — not the chunked channel. Gadgetbridge `AbstractFetchOperation`
+  + per-metric ops: `FetchHeartRateRestingOperation`, `FetchSpo2NormalOperation`,
+  `FetchStressAutoOperation`, `FetchSleepRespiratoryRateOperation`, `FetchActivityOperation`
+  (HRV is a field in the activity stream).
+- **Next build (the legacy fetch protocol):** write a start-fetch command to `0x0004`
+  (metric type + since-timestamp), stream samples over `0x0005`, ack/continue on `0x0004`,
+  parse the per-metric binary. **Easiest first target: resting HR** (dedicated op, simple
+  format) to validate the fetch loop, then SpO2/stress, then HRV via the activity parser.
+  This is a separate protocol from auth — a focused follow-up, gated on reading
+  `AbstractFetchOperation` + `FetchHeartRateRestingOperation`.
 
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):
