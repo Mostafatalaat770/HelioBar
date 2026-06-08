@@ -49,5 +49,7 @@ set -a
 source "$repo_root/.env"
 set +a
 
-echo "Running ZeppSpike. Wear the strap and make sure the Zepp app is closed. Ctrl-C to stop."
-KEY="$KEY" "$macos_path/ZeppSpike"
+# Metric to fetch: restinghr (default) | spo2 | stress | respiratory
+metric="${1:-restinghr}"
+echo "Running ZeppSpike (metric: $metric). Wear the strap and make sure the Zepp app is closed. Ctrl-C to stop."
+KEY="$KEY" METRIC="$metric" "$macos_path/ZeppSpike"

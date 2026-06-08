@@ -20,6 +20,16 @@ let authEndpoint: UInt16 = 0x0082
 func log(_ s: String) { print(s); fflush(stdout) }
 func hex(_ b: [UInt8]) -> String { b.map { String(format: "%02X", $0) }.joined() }
 
+let metricName = (ProcessInfo.processInfo.environment["METRIC"] ?? "restinghr").lowercased()
+func metricType(_ name: String) -> (type: UInt8, label: String) {
+    switch name {
+    case "spo2":               return (HuamiActivityFetch.typeSpo2, "SpO2")
+    case "stress":             return (HuamiActivityFetch.typeStressAuto, "stress")
+    case "respiratory", "resp": return (HuamiActivityFetch.typeRespiratoryRate, "respiratory rate")
+    default:                   return (HuamiActivityFetch.typeRestingHeartRate, "resting HR")
+    }
+}
+
 func loadAuthKey() -> [UInt8]? {
     var raw: String?
     if let env = ProcessInfo.processInfo.environment["KEY"] { raw = env }
@@ -48,6 +58,7 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var fetchStarted = false
     private var fetchBuffer: [UInt8] = []
     private var lastCounter = -1
+    private var fetchStartDate: Date?
     private let auth: HuamiAuth
     private var decoder = Huami2021Chunked.Decoder(extendedFlags: true)
     private var writeHandle: UInt8 = 0
@@ -111,9 +122,9 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         fetchStarted = true
         fetchBuffer = []; lastCounter = -1
         let since = Date(timeIntervalSinceNow: -100 * 24 * 3600)   // last 100 days
-        let cmd = HuamiActivityFetch.startCommand(dataType: HuamiActivityFetch.typeRestingHeartRate,
-                                                  since: since, timeZone: .current)
-        log("Authenticated. Fetching resting HR (last 100 days)…\n→ ctrl \(hex(cmd))")
+        let metric = metricType(metricName)
+        let cmd = HuamiActivityFetch.startCommand(dataType: metric.type, since: since, timeZone: .current)
+        log("Authenticated. Fetching \(metric.label) (last 100 days)…\n→ ctrl \(hex(cmd))")
         p.writeValue(Data(cmd), for: ctrl, type: .withoutResponse)
     }
 
@@ -126,9 +137,10 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private func onControl(_ bytes: [UInt8]) {
         log("← ctrl \(hex(bytes))")
         switch HuamiActivityFetch.parseControl(bytes) {
-        case .startDate(let expected, let ok):
+        case .startDate(let expected, let ok, let start):
             guard ok else { log("❌ start-date rejected"); exit(1) }
-            if expected == 0 { log("No resting-HR data in range."); ctrlWrite(HuamiActivityFetch.ackCommand(keepOnDevice: true)); return }
+            fetchStartDate = start
+            if expected == 0 { log("No \(metricType(metricName).label) data in range."); ctrlWrite(HuamiActivityFetch.ackCommand(keepOnDevice: true)); return }
             log("Expecting \(expected) bytes. Requesting data…")
             ctrlWrite(HuamiActivityFetch.fetchDataCommand())
         case .fetchData(let ok, let crc):
@@ -137,12 +149,7 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
                 let ours = CRC32.checksum(fetchBuffer[...])
                 log("CRC \(crc == ours ? "OK" : "MISMATCH (device \(crc), ours \(ours))")")
             }
-            if let samples = HuamiActivityFetch.parseRestingHR(fetchBuffer) {
-                log("\n✅ \(samples.count) resting-HR samples (showing last 10):")
-                for s in samples.suffix(10) { log("  \(s.date) — \(s.hr) bpm") }
-            } else {
-                log("⚠️ \(fetchBuffer.count) bytes, not a multiple of 6")
-            }
+            printSamples()
             ctrlWrite(HuamiActivityFetch.ackCommand(keepOnDevice: true))
         case .ackAcknowledged:
             log("\n🎉 Fetch complete — real biometric data, fully local."); exit(0)
@@ -150,6 +157,31 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
             log("Unhandled control: \(hex(bytes))")
         }
     }
+
+    private func printSamples() {
+        let buf = fetchBuffer
+        switch metricName {
+        case "spo2":
+            guard let s = HuamiActivityFetch.parseSpo2(buf) else { return badBuffer() }
+            logSamples(s.map { "\($0.date) — \($0.spo2)%\($0.automatic ? " (auto)" : "")" })
+        case "stress":
+            let s = HuamiActivityFetch.parseStress(buf, since: fetchStartDate ?? Date(timeIntervalSinceNow: -100 * 24 * 3600))
+            logSamples(s.map { "\($0.date) — stress \($0.stress)" })
+        case "respiratory", "resp":
+            guard let s = HuamiActivityFetch.parseRespiratoryRate(buf) else { return badBuffer() }
+            logSamples(s.map { "\($0.date) — \($0.rate) br/min" })
+        default:
+            guard let s = HuamiActivityFetch.parseRestingHR(buf) else { return badBuffer() }
+            logSamples(s.map { "\($0.date) — \($0.hr) bpm" })
+        }
+    }
+
+    private func logSamples(_ lines: [String]) {
+        log("\n✅ \(lines.count) \(metricType(metricName).label) samples (showing last 10):")
+        for line in lines.suffix(10) { log("  \(line)") }
+    }
+
+    private func badBuffer() { log("⚠️ \(fetchBuffer.count) bytes — unexpected format for \(metricName)") }
 
     private func onData(_ bytes: [UInt8]) {
         guard let counter = bytes.first else { return }

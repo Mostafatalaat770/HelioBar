@@ -50,10 +50,22 @@ public enum HuamiActivityFetch {
     }
 
     public enum ControlResponse: Equatable {
-        case startDate(expectedBytes: Int, success: Bool)
+        case startDate(expectedBytes: Int, success: Bool, startDate: Date?)
         case fetchData(success: Bool, crc32: UInt32?)
         case ackAcknowledged
         case unknown
+    }
+
+    /// Parse the 8-byte MINUTES-precision date the device echoes in the start
+    /// response: year(LE) · month · day · hour · minute · 0 · tz(quarter-hours).
+    public static func parseMinutesDate(_ b: [UInt8]) -> Date? {
+        guard b.count >= 8 else { return nil }
+        var cal = Calendar(identifier: .gregorian)
+        cal.timeZone = TimeZone(secondsFromGMT: Int(Int8(bitPattern: b[7])) * 900) ?? .gmt
+        var c = DateComponents()
+        c.year = Int(b[0]) | Int(b[1]) << 8
+        c.month = Int(b[2]); c.day = Int(b[3]); c.hour = Int(b[4]); c.minute = Int(b[5])
+        return cal.date(from: c)
     }
 
     /// Parse a notification from the control characteristic (0x0004).
@@ -65,7 +77,8 @@ public enum HuamiActivityFetch {
             let len = bytes.count >= 7
                 ? Int(bytes[3]) | Int(bytes[4]) << 8 | Int(bytes[5]) << 16 | Int(bytes[6]) << 24
                 : 0
-            return .startDate(expectedBytes: len, success: ok)
+            let start = bytes.count >= 15 ? parseMinutesDate(Array(bytes[7..<15])) : nil
+            return .startDate(expectedBytes: len, success: ok, startDate: start)
         case cmdFetchData:
             let ok = bytes[2] == success
             let crc: UInt32? = bytes.count >= 7
@@ -89,17 +102,66 @@ public enum HuamiActivityFetch {
     /// `[timestamp u32 LE seconds][utcOffset i8 quarter-hours][hr u8]`.
     public static func parseRestingHR(_ buffer: [UInt8]) -> [RestingHRSample]? {
         guard buffer.count % 6 == 0 else { return nil }
-        var out: [RestingHRSample] = []
-        var i = 0
-        while i < buffer.count {
-            let ts = UInt32(buffer[i]) | UInt32(buffer[i + 1]) << 8
-                | UInt32(buffer[i + 2]) << 16 | UInt32(buffer[i + 3]) << 24
-            let offset = Int(Int8(bitPattern: buffer[i + 4]))
-            out.append(RestingHRSample(date: Date(timeIntervalSince1970: TimeInterval(ts)),
-                                       hr: Int(buffer[i + 5]),
-                                       utcOffsetQuarterHours: offset))
-            i += 6
+        return stride(from: 0, to: buffer.count, by: 6).map { i in
+            RestingHRSample(date: u32Date(buffer, i),
+                            hr: Int(buffer[i + 5]),
+                            utcOffsetQuarterHours: Int(Int8(bitPattern: buffer[i + 4])))
+        }
+    }
+
+    public struct Spo2Sample: Equatable {
+        public let date: Date
+        public let spo2: Int
+        public let automatic: Bool
+    }
+
+    /// SpO2: 1 version byte (=2), then 65-byte records `[ts u32][spo2 i8: <0 ⇒
+    /// +128 = automatic][60 unused]`.
+    public static func parseSpo2(_ buffer: [UInt8]) -> [Spo2Sample]? {
+        guard buffer.count >= 1, (buffer.count - 1) % 65 == 0, buffer[0] == 2 else { return nil }
+        return stride(from: 1, to: buffer.count, by: 65).map { i in
+            let raw = Int8(bitPattern: buffer[i + 4])
+            return Spo2Sample(date: u32Date(buffer, i),
+                              spo2: Int(raw < 0 ? Int(raw) + 128 : Int(raw)),
+                              automatic: raw < 0)
+        }
+    }
+
+    public struct RespiratoryRateSample: Equatable {
+        public let date: Date
+        public let rate: Int
+        public let utcOffsetQuarterHours: Int
+    }
+
+    /// Sleep respiratory rate: 8-byte records `[ts u32][tz i8][rate u8][_][_]`.
+    public static func parseRespiratoryRate(_ buffer: [UInt8]) -> [RespiratoryRateSample]? {
+        guard buffer.count % 8 == 0 else { return nil }
+        return stride(from: 0, to: buffer.count, by: 8).map { i in
+            RespiratoryRateSample(date: u32Date(buffer, i),
+                                  rate: Int(buffer[i + 5]),
+                                  utcOffsetQuarterHours: Int(Int8(bitPattern: buffer[i + 4])))
+        }
+    }
+
+    public struct StressSample: Equatable {
+        public let date: Date
+        public let stress: Int
+    }
+
+    /// Automatic stress: one byte per minute starting at `since`; `0xFF` = a gap
+    /// (no measurement) that still advances the clock.
+    public static func parseStress(_ buffer: [UInt8], since: Date) -> [StressSample] {
+        var out: [StressSample] = []
+        var time = since
+        for b in buffer {
+            if b != 0xFF { out.append(StressSample(date: time, stress: Int(b))) }
+            time.addTimeInterval(60)
         }
         return out
+    }
+
+    private static func u32Date(_ b: [UInt8], _ i: Int) -> Date {
+        let ts = UInt32(b[i]) | UInt32(b[i + 1]) << 8 | UInt32(b[i + 2]) << 16 | UInt32(b[i + 3]) << 24
+        return Date(timeIntervalSince1970: TimeInterval(ts))
     }
 }
