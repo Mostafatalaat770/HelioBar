@@ -18,6 +18,35 @@ transport + crypto are real and the rest is decoding more frame types.
 
 ---
 
+## RESULTS — Step 1 DONE (2026-06-08) ✅ GREEN LIGHT
+
+`inspect-ble.sh` on the actual strap (firmware `3.13.0.1`, serial `2445B531000856`,
+MAC `C4:81:BC:2F:42:1F` from System ID) confirmed the proprietary stack. **It is the
+Huami2021 / ZeppOS protocol** — same one Gadgetbridge decodes.
+
+Service / characteristic map (Huami UUID base `XXXXXXXX-0000-3512-2118-0009AF100700`):
+
+| UUID | Role | Props |
+|---|---|---|
+| `FEE0` / `FEE1` | Huami data + auth services | — |
+| `0x0016` | **Chunked-2021 WRITE** (auth + commands) | writeWithoutResponse, notify |
+| `0x0017` | **Chunked-2021 READ** | writeWithoutResponse, notify |
+| `0x0004` / `0x0005` | Legacy activity fetch (history) CONTROL / DATA | — |
+| `0x0001` / `0x0002` / `0x0006` / `0x0023..0x0025` | Legacy Huami chars | — |
+| `00001530/1531/1532` | Firmware/DFU (ignore) | — |
+| `2A37` (180D) | Live HR — already used by HelioBar | notify |
+| `2A19` (180F) | Battery — already used | read, notify |
+
+Decisions resolved:
+- **No `0x0009` auth char** → Huami2021 ECDH handshake (not the legacy simple-AES one).
+- **Rich data is fetch-based, not streamed.** Live HR stays on standard `2A37`; HRV/sleep/
+  stress come from authenticated requests over `0x0016/0x0017`, history via `0x0004/0x0005`.
+  → product shape = keep live HR + add a periodic "sync rich metrics" fetch.
+- The strap accepted the Mac connection and exposed everything (Zepp closed). Whether the
+  authenticated handshake also needs Zepp fully disconnected is TBD at Step 3.
+
+**Next: Step 2 (get the auth key) + Step 3 (build the handshake).**
+
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):
 
