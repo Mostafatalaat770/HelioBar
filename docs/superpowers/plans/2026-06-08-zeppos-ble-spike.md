@@ -47,6 +47,24 @@ Decisions resolved:
 
 **Next: Step 2 (get the auth key) + Step 3 (build the handshake).**
 
+### Step 3 progress — crypto core built + verified offline (2026-06-08)
+The hardware-independent half of the handshake is done, in `HelioCore/Sources/HelioCore/Zepp/`
+(pure + unit-tested, rather than a throwaway CLI, so it can graduate straight into Phase 2):
+- `AESECB` — AES-128-ECB, checked against the FIPS-197 vector.
+- `GF163` — GF(2^163) field, checked against hand-computed reductions + the known x⁻¹.
+- `Sect163k1` — curve point ops + ECDH. Fast tests (group law, small-scalar ECDH symmetry)
+  run by default; the rigorous full-size proofs (**n·G = ∞**, full-scalar ECDH symmetry) are
+  opt-in to keep `swift test` fast:
+  ```
+  RUN_EC_SLOW_TESTS=1 swift test --filter Sect163k1Tests
+  ```
+  (Note: affine coords → the full-size proofs take ~25s. If Phase 2 needs faster auth, switch
+  scalarMul to López–Dahab projective to cut per-step inversions.)
+
+**Still needs the auth key + hardware:** the BLE transport (chunked framing over `0x0016/0x0017`),
+the public-key wire format (byte layout/endianness — match Gadgetbridge), and the live
+auth state machine. `sessionKey = sharedSecret[8..24] XOR authKey`.
+
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):
 
