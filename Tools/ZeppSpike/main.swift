@@ -13,6 +13,8 @@ let authService = CBUUID(string: "FEE1")
 let hrService = CBUUID(string: "180D")
 let chunkedWrite = CBUUID(string: "00000016-0000-3512-2118-0009AF100700")
 let chunkedRead = CBUUID(string: "00000017-0000-3512-2118-0009AF100700")
+let fetchControl = CBUUID(string: "00000004-0000-3512-2118-0009AF100700")
+let fetchData = CBUUID(string: "00000005-0000-3512-2118-0009AF100700")
 let authEndpoint: UInt16 = 0x0082
 
 func log(_ s: String) { print(s); fflush(stdout) }
@@ -37,8 +39,15 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private var peripheral: CBPeripheral?
     private var writeChar: CBCharacteristic?
     private var readChar: CBCharacteristic?
+    private var controlChar: CBCharacteristic?
+    private var dataChar: CBCharacteristic?
     private var notifyRequested = false
     private var handshakeStarted = false
+    private var fetchControlReady = false
+    private var fetchDataReady = false
+    private var fetchStarted = false
+    private var fetchBuffer: [UInt8] = []
+    private var lastCounter = -1
     private let auth: HuamiAuth
     private var decoder = Huami2021Chunked.Decoder(extendedFlags: true)
     private var writeHandle: UInt8 = 0
@@ -76,6 +85,8 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         for ch in s.characteristics ?? [] {
             if ch.uuid == chunkedWrite { writeChar = ch; log("Found 0x0016 (write) under \(s.uuid)") }
             if ch.uuid == chunkedRead { readChar = ch; log("Found 0x0017 (notify) under \(s.uuid)") }
+            if ch.uuid == fetchControl { controlChar = ch }
+            if ch.uuid == fetchData { dataChar = ch }
         }
         if let r = readChar, writeChar != nil, !notifyRequested {
             notifyRequested = true
@@ -84,11 +95,70 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     }
 
     func peripheral(_ p: CBPeripheral, didUpdateNotificationStateFor ch: CBCharacteristic, error: Error?) {
-        guard ch.uuid == chunkedRead, ch.isNotifying, !handshakeStarted else { return }
-        handshakeStarted = true
-        mtu = p.maximumWriteValueLength(for: .withoutResponse) + 3   // negotiated by now
-        log("Notify on (write MTU \(mtu)). Sending our public key…")
-        send(payload: auth.sendPublicKeyPayload())
+        if ch.uuid == chunkedRead, ch.isNotifying, !handshakeStarted {
+            handshakeStarted = true
+            mtu = p.maximumWriteValueLength(for: .withoutResponse) + 3   // negotiated by now
+            log("Notify on (write MTU \(mtu)). Sending our public key…")
+            send(payload: auth.sendPublicKeyPayload())
+        }
+        if ch.uuid == fetchControl, ch.isNotifying { fetchControlReady = true }
+        if ch.uuid == fetchData, ch.isNotifying { fetchDataReady = true }
+        if fetchControlReady, fetchDataReady, !fetchStarted { startFetch() }
+    }
+
+    private func startFetch() {
+        guard let p = peripheral, let ctrl = controlChar else { log("fetch control char missing"); exit(1) }
+        fetchStarted = true
+        fetchBuffer = []; lastCounter = -1
+        let since = Date(timeIntervalSinceNow: -100 * 24 * 3600)   // last 100 days
+        let cmd = HuamiActivityFetch.startCommand(dataType: HuamiActivityFetch.typeRestingHeartRate,
+                                                  since: since, timeZone: .current)
+        log("Authenticated. Fetching resting HR (last 100 days)…\n→ ctrl \(hex(cmd))")
+        p.writeValue(Data(cmd), for: ctrl, type: .withoutResponse)
+    }
+
+    private func ctrlWrite(_ bytes: [UInt8]) {
+        guard let p = peripheral, let ctrl = controlChar else { return }
+        log("→ ctrl \(hex(bytes))")
+        p.writeValue(Data(bytes), for: ctrl, type: .withoutResponse)
+    }
+
+    private func onControl(_ bytes: [UInt8]) {
+        log("← ctrl \(hex(bytes))")
+        switch HuamiActivityFetch.parseControl(bytes) {
+        case .startDate(let expected, let ok):
+            guard ok else { log("❌ start-date rejected"); exit(1) }
+            if expected == 0 { log("No resting-HR data in range."); ctrlWrite(HuamiActivityFetch.ackCommand(keepOnDevice: true)); return }
+            log("Expecting \(expected) bytes. Requesting data…")
+            ctrlWrite(HuamiActivityFetch.fetchDataCommand())
+        case .fetchData(let ok, let crc):
+            guard ok else { log("❌ fetch rejected"); exit(1) }
+            if let crc {
+                let ours = CRC32.checksum(fetchBuffer[...])
+                log("CRC \(crc == ours ? "OK" : "MISMATCH (device \(crc), ours \(ours))")")
+            }
+            if let samples = HuamiActivityFetch.parseRestingHR(fetchBuffer) {
+                log("\n✅ \(samples.count) resting-HR samples (showing last 10):")
+                for s in samples.suffix(10) { log("  \(s.date) — \(s.hr) bpm") }
+            } else {
+                log("⚠️ \(fetchBuffer.count) bytes, not a multiple of 6")
+            }
+            ctrlWrite(HuamiActivityFetch.ackCommand(keepOnDevice: true))
+        case .ackAcknowledged:
+            log("\n🎉 Fetch complete — real biometric data, fully local."); exit(0)
+        case .unknown:
+            log("Unhandled control: \(hex(bytes))")
+        }
+    }
+
+    private func onData(_ bytes: [UInt8]) {
+        guard let counter = bytes.first else { return }
+        if UInt8((lastCounter + 1) & 0xff) == counter {
+            lastCounter += 1
+            fetchBuffer.append(contentsOf: bytes.dropFirst())
+        } else {
+            log("⚠️ bad packet counter \(counter), expected \((lastCounter + 1) & 0xff)")
+        }
     }
 
     private func send(payload: [UInt8]) {
@@ -105,13 +175,23 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
         guard let data = ch.value else { return }
         let bytes = [UInt8](data)
+        switch ch.uuid {
+        case fetchControl: onControl(bytes); return
+        case fetchData: onData(bytes); return
+        default: break
+        }
         log("← \(hex(bytes))")
         guard let (type, payload) = decoder.receive(bytes), type == authEndpoint else { return }
         switch auth.handle(payload) {
         case .sendConfirmation(let reply):
             log("Got remote key — sending confirmation…"); send(payload: reply)
         case .authenticated:
-            log("\n✅ AUTH OK — handshake succeeded. Path B is real."); exit(0)
+            log("\n✅ AUTH OK — handshake succeeded. Path B is real.")
+            guard let ctrl = controlChar, let dat = dataChar else {
+                log("fetch chars 0x0004/0x0005 missing"); exit(1)
+            }
+            p.setNotifyValue(true, for: dat)
+            p.setNotifyValue(true, for: ctrl)   // startFetch() fires once both are on
         case .failed(let why):
             log("\n❌ \(why)"); exit(1)
         }

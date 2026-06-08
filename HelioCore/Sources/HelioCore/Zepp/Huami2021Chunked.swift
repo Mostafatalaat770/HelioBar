@@ -2,8 +2,8 @@ import Foundation
 
 /// Standard IEEE CRC-32 (reflected, poly 0xEDB88320) — matches Gadgetbridge's
 /// `CheckSums.getCRC32` (java.util.zip.CRC32), used in the encrypted payload.
-enum CRC32 {
-    static func checksum(_ bytes: ArraySlice<UInt8>) -> UInt32 {
+public enum CRC32 {
+    public static func checksum(_ bytes: ArraySlice<UInt8>) -> UInt32 {
         var crc: UInt32 = 0xFFFF_FFFF
         for byte in bytes {
             crc ^= UInt32(byte)
