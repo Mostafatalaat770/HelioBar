@@ -5,3 +5,10 @@ DerivedData/
 *.xcodeproj
 .build/
 HelioCore/.build/
+
+# Secrets — never commit the ZeppOS BLE auth key or account credentials
+.env
+.env.*
+*.authkey
+# Third-party key-extraction tool (may cache credentials); cloned locally only
+huami-token/
