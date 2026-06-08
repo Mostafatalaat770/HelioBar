@@ -9,6 +9,7 @@ import SwiftUI
 struct PulsingHeart: View {
     let bpm: Int?
     var color: Color = Theme.high
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     /// One beat (full expand+contract cycle) duration in seconds, derived from
     /// BPM. Clamped so extreme/garbage values don't produce absurd tempos.
@@ -18,7 +19,7 @@ struct PulsingHeart: View {
     }
 
     var body: some View {
-        if let beat {
+        if let beat, !reduceMotion {
             TimelineView(.animation) { context in
                 let t = context.date.timeIntervalSinceReferenceDate
                 let phase = (sin(2 * .pi * t / beat) + 1) / 2   // 0…1, one cycle per beat

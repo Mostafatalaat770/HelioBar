@@ -8,7 +8,11 @@ struct BreathingView: View {
 
     @State private var inhaling = false
     @State private var session = BreathingSession()
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let timer = Timer.publish(every: 4, on: .main, in: .common).autoconnect()
+
+    /// Orb diameter. Fixed (no pulsing) when the user prefers reduced motion.
+    private var orbSize: CGFloat { reduceMotion ? 115 : (inhaling ? 150 : 80) }
 
     var body: some View {
         VStack(spacing: Theme.md) {
@@ -29,9 +33,9 @@ struct BreathingView: View {
                         center: .center, startRadius: 4, endRadius: 90))
                 Circle().strokeBorder(Theme.resting.opacity(0.7), lineWidth: 2)
             }
-            .frame(width: inhaling ? 150 : 80, height: inhaling ? 150 : 80)
+            .frame(width: orbSize, height: orbSize)
             .shadow(color: Theme.resting.opacity(0.4), radius: 12)
-            .animation(.easeInOut(duration: 4), value: inhaling)
+            .animation(reduceMotion ? nil : .easeInOut(duration: 4), value: inhaling)
             .frame(height: 160)   // reserve space so the popover doesn't jump
 
             VStack(spacing: 2) {
