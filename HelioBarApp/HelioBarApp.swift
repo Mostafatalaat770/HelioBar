@@ -22,6 +22,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let popover = NSPopover()
     private var titleTimer: Timer?
     private var settingsWindow: NSWindow?
+    /// Last state rendered into the menu-bar image, so the 1s tick can skip the
+    /// NSImage rebuild when nothing visible changed (HR holds steady most of the
+    /// time, and this timer runs for the whole life of the app).
+    private var lastRendered: (bpm: Int?, zone: HRZone?, status: SourceStatus)?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -51,9 +55,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateTitle() {
         guard let button = statusItem?.button else { return }
         let store = model.store
-        button.image = MenuBarIcon.image(bpm: store.liveHR,
-                                         zone: store.hrZone,
-                                         status: store.hrStatus)
+        let bpm = store.liveHR, zone = store.hrZone, status = store.hrStatus
+        if let last = lastRendered,
+           last.bpm == bpm, last.zone == zone, last.status == status { return }
+        lastRendered = (bpm, zone, status)
+        button.image = MenuBarIcon.image(bpm: bpm, zone: zone, status: status)
     }
 
     @objc private func togglePopover(_ sender: Any?) {
