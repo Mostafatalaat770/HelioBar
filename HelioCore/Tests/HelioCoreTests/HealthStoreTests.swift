@@ -89,4 +89,30 @@ final class HealthStoreTests: XCTestCase {
         s.updateHR(90)
         XCTAssertEqual(s.hrTrend, .rising)
     }
+    func test_trendNilUntilSixSamples() {
+        let s = HealthStore()
+        [70,70,70,70,70].forEach { s.updateHR($0) }   // only 5 samples
+        XCTAssertNil(s.hrTrend)
+        s.updateHR(70)
+        XCTAssertEqual(s.hrTrend, .steady)            // 6th sample enables the trend
+    }
+    func test_trendFalling() {
+        let s = HealthStore()
+        [90,90,90,90,90,90].forEach { s.updateHR($0) }
+        s.updateHR(70)                                // window avg ≈ 86.7, last 70 → falling
+        XCTAssertEqual(s.hrTrend, .falling)
+    }
+    func test_trendSteadyWithinBoundary() {
+        let s = HealthStore()
+        [70,70,70,70,70].forEach { s.updateHR($0) }
+        s.updateHR(72)                                // window avg ≈ 70.3, +2 is not > avg+2
+        XCTAssertEqual(s.hrTrend, .steady)
+    }
+    func test_recentIsCappedAndSlidesToNewest() {
+        let s = HealthStore()
+        (1...200).forEach { s.updateHR($0) }
+        XCTAssertEqual(s.recent.count, 150)           // cap holds
+        XCTAssertEqual(s.recent.first, 51)            // oldest 50 dropped
+        XCTAssertEqual(s.recent.last, 200)            // newest retained
+    }
 }
