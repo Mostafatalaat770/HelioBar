@@ -15,25 +15,13 @@ public struct ElevatedHRConfig: Equatable, Sendable {
 /// drops back below threshold, which re-arms it).
 public final class ElevatedHRAlertEngine {
     public var config: ElevatedHRConfig
-    private var elevatedSince: Date?
-    private var fired = false
+    private let trigger = SustainedTrigger()
 
     public init(config: ElevatedHRConfig = .init()) { self.config = config }
 
     /// Call on each HR sample. Returns true exactly once when the alert should fire.
     public func evaluate(bpm: Int, now: Date) -> Bool {
-        guard config.enabled else { reset(); return false }
-        if bpm >= config.threshold {
-            if elevatedSince == nil { elevatedSince = now }
-            if !fired, let since = elevatedSince, now.timeIntervalSince(since) >= config.duration {
-                fired = true
-                return true
-            }
-        } else {
-            reset()
-        }
-        return false
+        guard config.enabled else { trigger.reset(); return false }
+        return trigger.evaluate(bpm >= config.threshold, now: now, duration: config.duration)
     }
-
-    private func reset() { elevatedSince = nil; fired = false }
 }

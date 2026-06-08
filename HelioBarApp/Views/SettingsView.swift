@@ -8,6 +8,9 @@ struct SettingsView: View {
     @AppStorage("alertEnabled") private var alertEnabled = false
     @AppStorage("alertThreshold") private var alertThreshold = 100
     @AppStorage("alertDurationMin") private var alertDurationMin = 3
+    @AppStorage("lowHRAlertEnabled") private var lowHRAlertEnabled = false
+    @AppStorage("lowHRThreshold") private var lowHRThreshold = 45
+    @AppStorage("lowHRDurationMin") private var lowHRDurationMin = 2
     @AppStorage("batteryAlertEnabled") private var batteryAlertEnabled = true
     @AppStorage("batteryAlertThreshold") private var batteryAlertThreshold = 20
     @AppStorage("autoUpdateCheck") private var autoUpdateCheck = true
@@ -37,6 +40,13 @@ struct SettingsView: View {
                 Stepper("For \(alertDurationMin) min", value: $alertDurationMin, in: 1...30)
             } header: {
                 Label("Elevated-HR alert", systemImage: "heart.text.square.fill")
+            }
+            Section {
+                Toggle("Notify when HR stays low", isOn: $lowHRAlertEnabled)
+                Stepper("Below \(lowHRThreshold) bpm", value: $lowHRThreshold, in: 30...80, step: 5)
+                Stepper("For \(lowHRDurationMin) min", value: $lowHRDurationMin, in: 1...30)
+            } header: {
+                Label("Low-HR alert", systemImage: "heart.slash.fill")
             }
             Section {
                 Toggle("Notify when strap battery is low", isOn: $batteryAlertEnabled)

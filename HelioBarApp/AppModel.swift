@@ -10,6 +10,7 @@ final class AppModel {
     let updateChecker = UpdateChecker()
     private var monitor: HeartRateMonitor?
     private let alertEngine = ElevatedHRAlertEngine()
+    private let lowHRAlertEngine = LowHRAlertEngine()
     private let batteryAlertEngine = BatteryAlertEngine()
     private var started = false
 
@@ -36,7 +37,9 @@ final class AppModel {
     private func handle(bpm: Int) {
         applyPrefs()
         store.updateHR(bpm)
-        if alertEngine.evaluate(bpm: bpm, now: Date()) { fireAlert(bpm) }
+        let now = Date()
+        if alertEngine.evaluate(bpm: bpm, now: now) { fireAlert(bpm) }
+        if lowHRAlertEngine.evaluate(bpm: bpm, now: now) { fireLowHRAlert(bpm) }
     }
 
     private func handleBattery(percent: Int) {
@@ -55,6 +58,10 @@ final class AppModel {
             enabled: d.bool(forKey: "alertEnabled"),
             threshold: (d.object(forKey: "alertThreshold") as? Int) ?? 100,
             duration: TimeInterval(((d.object(forKey: "alertDurationMin") as? Int) ?? 3) * 60))
+        lowHRAlertEngine.config = LowHRConfig(
+            enabled: d.bool(forKey: "lowHRAlertEnabled"),
+            threshold: (d.object(forKey: "lowHRThreshold") as? Int) ?? 45,
+            duration: TimeInterval(((d.object(forKey: "lowHRDurationMin") as? Int) ?? 2) * 60))
         batteryAlertEngine.config = BatteryAlertConfig(
             enabled: (d.object(forKey: "batteryAlertEnabled") as? Bool) ?? true,
             threshold: (d.object(forKey: "batteryAlertThreshold") as? Int) ?? 20)
@@ -67,6 +74,15 @@ final class AppModel {
         c.sound = .default
         UNUserNotificationCenter.current().add(
             UNNotificationRequest(identifier: UUID().uuidString, content: c, trigger: nil))
+    }
+
+    private func fireLowHRAlert(_ bpm: Int) {
+        let c = UNMutableNotificationContent()
+        c.title = "Heart rate low"
+        c.body = "\(bpm) bpm for a while — worth a glance."
+        c.sound = .default
+        UNUserNotificationCenter.current().add(
+            UNNotificationRequest(identifier: "low-hr", content: c, trigger: nil))
     }
 
     private func fireBatteryAlert(_ percent: Int) {
