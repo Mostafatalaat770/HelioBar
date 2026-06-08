@@ -61,9 +61,24 @@ The hardware-independent half of the handshake is done, in `HelioCore/Sources/He
   (Note: affine coords → the full-size proofs take ~25s. If Phase 2 needs faster auth, switch
   scalarMul to López–Dahab projective to cut per-step inversions.)
 
-**Still needs the auth key + hardware:** the BLE transport (chunked framing over `0x0016/0x0017`),
-the public-key wire format (byte layout/endianness — match Gadgetbridge), and the live
-auth state machine. `sessionKey = sharedSecret[8..24] XOR authKey`.
+- `Huami2021Chunked` — the chunked transfer framing over `0x0016/0x0017` (from the
+  Gadgetbridge `Huami2021ChunkedEncoder`). Encoder + reassembling decoder, round-trip tested.
+  Wire format (non-extended, 4-byte header): `[0]=0x03 [1]=flags [2]=writeHandle [3]=count`;
+  first chunk then carries 4-byte LE length + 2-byte LE type; flags `0x01`=first, `0x06`=last,
+  `0x08`=encrypted. `MAX_CHUNKLENGTH = mtu − 3 − headerSize`.
+
+**Encrypted post-auth payload (captured for later, not yet coded):** `messageKey[i] =
+sessionKey[i] ^ writeHandle`; payload wrapped as `seqNo(4) + data + crc32(4)`, padded to 16,
+AES-encrypted. The ECDH auth exchange itself is sent *unencrypted* (sessionKey not yet known),
+which is why the unencrypted framing above is what we need first.
+
+**Still needs the auth key + hardware (next session):**
+1. The auth command sequence (fetch Gadgetbridge `Huami2021` auth service): send our public
+   key → receive device key + encrypted random → `sessionKey = sharedSecret[8..24] XOR authKey`
+   → AES round-trip the challenge → confirm. Public-key byte layout/endianness from source.
+2. A `Tools/ZeppSpike` BLE CLI: read `KEY` from `.env`, connect, run the handshake using the
+   verified `Sect163k1`/`AESECB`/`Huami2021Chunked`, print "auth OK".
+3. Iterate live against the strap (extended-flags? MTU? coexist-with-Zepp?).
 
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):
