@@ -47,12 +47,30 @@ HelioCore (verified) and authenticated locally.
 **`./scripts/zepp-spike.sh` fetched 99 days of resting-HR history, 100% local, CRC-validated.**
 The legacy activity-fetch protocol (0x0004/0x0005) works: 594 bytes = 99 × 6-byte records,
 device CRC matched ours, values physiologically correct (46–53 bpm daily resting HR). Auth +
-fetch are both proven on hardware. The remaining metrics are now *just parsers* on the same
-fetch loop:
-- Easy (same record-style fetch): SpO2 (0x25), stress (0x13), respiratory rate (0x38), temp (0x2e)
-- HRV: lives in the ACTIVITY stream (0x01) — needs the activity-sample binary parser
-- Then **productionize**: a `RichBiometricsMonitor` in the app feeding `HealthStore`, with
-  Tier-1 BPM as the live fallback (recovery score = resting HR + HRV).
+fetch are both proven on hardware. All locally-available metrics are now implemented in
+`HuamiActivityFetch` + the spike CLI:
+- ✅ resting HR (0x3a, proven on HW), SpO2 (0x25), stress (0x13), respiratory rate (0x38)
+- ✅ activity (0x01): per-minute 24/7 HR + steps + intensity + **sleep stages (light/deep/REM)**
+
+### ⚠️ HRV is NOT available over local BLE (confirmed 2026-06-08)
+Verified four ways against Gadgetbridge: no `FetchHrv` op, no HRV `HuamiFetchDataType`, no
+`HuamiHrv` sample provider, and no HRV field in the activity record (basic or extended). The
+strap computes HRV internally but surfaces it only via the Zepp app → cloud/Apple Health
+(Path C). **Local "recovery" must come from resting-HR trend + sleep, not RMSSD HRV.** Sleep
+stages (from the activity stream) are the upside — they unlock the **smart-alarm** feature.
+
+### Phase 2b — productionize into the app (next focused build)
+Protocol logic is all reusable in `HelioCore` (`B163`, `AESECB`, `HuamiAuth`,
+`Huami2021Chunked`, `HuamiActivityFetch`). Remaining app work + the real decisions:
+1. **One connection, not two.** The strap allows a single BLE central, so extend the existing
+   `HeartRateMonitor` so one connection serves live HR (2A37) *and*, when an auth key is set,
+   runs auth + a periodic rich fetch. Live-HR path stays untouched as the fallback.
+2. **Keychain** for the auth key + a Settings field (never UserDefaults — matches the existing
+   `.env` secret hygiene).
+3. **HealthStore** already has `restingHR` (added for Karvonen zones) → the fetched resting HR
+   auto-fills it, so zones self-personalize. Add history + latest SpO2/stress/sleep.
+4. **UI**: a resting-HR / recovery / sleep card in the popover.
+This modifies the working live-HR component, so it's a focused build — not a tail-end add-on.
 
 | # | Item | Effort | Notes |
 |---|---|---|---|
