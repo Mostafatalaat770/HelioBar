@@ -4,6 +4,7 @@ import HelioCore
 
 struct SettingsView: View {
     @AppStorage("age") private var age = 30
+    @AppStorage("restingHR") private var restingHR = 0
     @AppStorage("alertEnabled") private var alertEnabled = false
     @AppStorage("alertThreshold") private var alertThreshold = 100
     @AppStorage("alertDurationMin") private var alertDurationMin = 3
@@ -20,6 +21,12 @@ struct SettingsView: View {
             Section {
                 Stepper("Age: \(age)", value: $age, in: 10...100)
                 Text("Max HR ≈ \(maxHR(forAge: age)) bpm · zones scale to this")
+                    .font(.caption).foregroundStyle(.secondary)
+                Stepper("Resting HR: \(restingHR == 0 ? "off" : "\(restingHR) bpm")",
+                        value: $restingHR, in: 0...100, step: 1)
+                Text(restingHR == 0
+                     ? "Set your resting HR for more personal zones (heart-rate reserve)."
+                     : "Zones use heart-rate reserve: (HR − \(restingHR)) / (\(maxHR(forAge: age)) − \(restingHR)).")
                     .font(.caption).foregroundStyle(.secondary)
             } header: {
                 Label("You", systemImage: "person.fill")

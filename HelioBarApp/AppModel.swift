@@ -49,6 +49,8 @@ final class AppModel {
         let d = UserDefaults.standard
         let age = (d.object(forKey: "age") as? Int) ?? 30
         store.maxHR = maxHR(forAge: age)
+        let resting = (d.object(forKey: "restingHR") as? Int) ?? 0
+        store.restingHR = resting > 0 ? resting : nil   // 0 = off (use %max)
         alertEngine.config = ElevatedHRConfig(
             enabled: d.bool(forKey: "alertEnabled"),
             threshold: (d.object(forKey: "alertThreshold") as? Int) ?? 100,

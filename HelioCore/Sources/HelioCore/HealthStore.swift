@@ -10,6 +10,9 @@ public final class HealthStore {
     public var batteryPercent: Int?
     public var batteryEstimate: BatteryEstimate = .calibrating
     public var maxHR: Int = 190
+    /// Optional resting HR; when set, zones use heart-rate reserve (Karvonen)
+    /// instead of plain % of max. `nil` = off (the default %max behavior).
+    public var restingHR: Int?
 
     // Session analytics
     public private(set) var recent: [Int] = []          // for sparkline
@@ -32,7 +35,7 @@ public final class HealthStore {
         sessionMax = Swift.max(sessionMax ?? bpm, bpm)
         sessionSum += bpm
         sessionCount += 1
-        zoneCounts[HRZone.zone(for: bpm, maxHR: maxHR), default: 0] += 1
+        zoneCounts[HRZone.zone(for: bpm, maxHR: maxHR, restingHR: restingHR), default: 0] += 1
     }
 
     public func hrDisconnected() { hrStatus = .stale }
@@ -48,7 +51,7 @@ public final class HealthStore {
         sessionSum = 0; sessionCount = 0; zoneCounts = [:]
     }
 
-    public var hrZone: HRZone? { liveHR.map { HRZone.zone(for: $0, maxHR: maxHR) } }
+    public var hrZone: HRZone? { liveHR.map { HRZone.zone(for: $0, maxHR: maxHR, restingHR: restingHR) } }
 
     /// Current HR as a percentage of max HR.
     public var percentMax: Int? {
