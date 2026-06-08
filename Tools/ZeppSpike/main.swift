@@ -26,6 +26,7 @@ func metricType(_ name: String) -> (type: UInt8, label: String) {
     case "spo2":               return (HuamiActivityFetch.typeSpo2, "SpO2")
     case "stress":             return (HuamiActivityFetch.typeStressAuto, "stress")
     case "respiratory", "resp": return (HuamiActivityFetch.typeRespiratoryRate, "respiratory rate")
+    case "activity":           return (HuamiActivityFetch.typeActivity, "activity (HR + sleep stages)")
     default:                   return (HuamiActivityFetch.typeRestingHeartRate, "resting HR")
     }
 }
@@ -121,7 +122,8 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         guard let p = peripheral, let ctrl = controlChar else { log("fetch control char missing"); exit(1) }
         fetchStarted = true
         fetchBuffer = []; lastCounter = -1
-        let since = Date(timeIntervalSinceNow: -100 * 24 * 3600)   // last 100 days
+        let days = metricName == "activity" ? 2.0 : 100.0   // activity is per-minute → huge
+        let since = Date(timeIntervalSinceNow: -days * 24 * 3600)
         let metric = metricType(metricName)
         let cmd = HuamiActivityFetch.startCommand(dataType: metric.type, since: since, timeZone: .current)
         log("Authenticated. Fetching \(metric.label) (last 100 days)…\n→ ctrl \(hex(cmd))")
@@ -170,6 +172,17 @@ final class Spike: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
         case "respiratory", "resp":
             guard let s = HuamiActivityFetch.parseRespiratoryRate(buf) else { return badBuffer() }
             logSamples(s.map { "\($0.date) — \($0.rate) br/min" })
+        case "activity":
+            guard let s = HuamiActivityFetch.parseActivity(buf) else { return badBuffer() }
+            let start = fetchStartDate ?? Date()
+            let withHR = s.enumerated().filter { $0.element.heartRate > 0 }
+            let sleepMins = s.filter { $0.sleep > 0 || $0.deepSleep > 0 || $0.remSleep > 0 }.count
+            log("\n✅ \(s.count) activity minutes — \(withHR.count) with HR, \(sleepMins) sleep-stage minutes (last 12):")
+            for (i, sample) in withHR.suffix(12) {
+                let t = start.addingTimeInterval(Double(i) * 60)
+                let stage = sample.deepSleep > 0 ? "deep" : sample.remSleep > 0 ? "REM" : sample.sleep > 0 ? "light" : "awake"
+                log("  \(t) — \(sample.heartRate) bpm · \(stage) · \(sample.steps) steps")
+            }
         default:
             guard let s = HuamiActivityFetch.parseRestingHR(buf) else { return badBuffer() }
             logSamples(s.map { "\($0.date) — \($0.hr) bpm" })

@@ -66,6 +66,23 @@ final class HuamiActivityFetchTests: XCTestCase {
         XCTAssertEqual(s?[0].rate, 15)
     }
 
+    func test_parseActivityExtendedSamples() {
+        // two 8-byte samples: hr 62 (light sleep), hr 55 (deep sleep)
+        let buf: [UInt8] = [/*kind*/ 0x70, /*int*/ 0, /*steps*/ 0, /*hr*/ 62, 0, /*sleep*/ 1, /*deep*/ 0, /*rem*/ 0,
+                            0x70, 0, 0, 55, 0, 0, 1, 0]
+        let s = HuamiActivityFetch.parseActivity(buf)
+        XCTAssertEqual(s?.count, 2)
+        XCTAssertEqual(s?[0].heartRate, 62); XCTAssertEqual(s?[0].sleep, 1)
+        XCTAssertEqual(s?[1].heartRate, 55); XCTAssertEqual(s?[1].deepSleep, 1)
+    }
+
+    func test_parseActivityBasicSamples() {
+        let buf: [UInt8] = [0, 10, 5, 70,  0, 12, 0, 68]   // two 4-byte samples
+        let s = HuamiActivityFetch.parseActivity(buf)
+        XCTAssertEqual(s?.count, 2)
+        XCTAssertEqual(s?[1].heartRate, 68); XCTAssertEqual(s?[1].sleep, 0)
+    }
+
     func test_parseStressSkipsGaps() {
         let since = Date(timeIntervalSince1970: 1_700_000_000)
         let samples = HuamiActivityFetch.parseStress([30, 0xFF, 65, 0xFF, 0xFF, 90], since: since)

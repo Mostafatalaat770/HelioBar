@@ -160,6 +160,36 @@ public enum HuamiActivityFetch {
         return out
     }
 
+    public struct ActivitySample: Equatable {
+        public let kind: Int, intensity: Int, steps: Int, heartRate: Int
+        public let sleep: Int, deepSleep: Int, remSleep: Int   // 0 for 4-byte (non-extended) samples
+    }
+
+    /// Per-minute activity stream (type 0x01). Extended (8-byte) records carry
+    /// `[kind, intensity, steps, hr, _, sleep, deepSleep, remSleep]`; basic
+    /// (4-byte) records stop at `hr`. Samples are minute-spaced from the start
+    /// date (no per-record timestamp). No HRV field exists in either format.
+    public static func parseActivity(_ buffer: [UInt8]) -> [ActivitySample]? {
+        let size = buffer.count % 8 == 0 ? 8 : (buffer.count % 4 == 0 ? 4 : 0)
+        guard size != 0, !buffer.isEmpty else { return nil }
+        var out: [ActivitySample] = []
+        var i = 0
+        while i + size <= buffer.count {
+            let extended = size == 8
+            let sample = ActivitySample(
+                kind: Int(buffer[i]),
+                intensity: Int(buffer[i + 1]),
+                steps: Int(buffer[i + 2]),
+                heartRate: Int(buffer[i + 3]),
+                sleep: extended ? Int(buffer[i + 5]) : 0,
+                deepSleep: extended ? Int(buffer[i + 6]) : 0,
+                remSleep: extended ? Int(buffer[i + 7]) : 0)
+            out.append(sample)
+            i += size
+        }
+        return out
+    }
+
     private static func u32Date(_ b: [UInt8], _ i: Int) -> Date {
         let ts = UInt32(b[i]) | UInt32(b[i + 1]) << 8 | UInt32(b[i + 2]) << 16 | UInt32(b[i + 3]) << 24
         return Date(timeIntervalSince1970: TimeInterval(ts))
