@@ -74,13 +74,21 @@ sessionKey[i] ^ writeHandle`; payload wrapped as `seqNo(4) + data + crc32(4)`, p
 AES-encrypted. The ECDH auth exchange itself is sent *unencrypted* (sessionKey not yet known),
 which is why the unencrypted framing above is what we need first.
 
-**Still needs the auth key + hardware (next session):**
-1. The auth command sequence (fetch Gadgetbridge `Huami2021` auth service): send our public
-   key → receive device key + encrypted random → `sessionKey = sharedSecret[8..24] XOR authKey`
-   → AES round-trip the challenge → confirm. Public-key byte layout/endianness from source.
-2. A `Tools/ZeppSpike` BLE CLI: read `KEY` from `.env`, connect, run the handshake using the
-   verified `Sect163k1`/`AESECB`/`Huami2021Chunked`, print "auth OK".
-3. Iterate live against the strap (extended-flags? MTU? coexist-with-Zepp?).
+### Step 3 — CLI BUILT, READY TO RUN (2026-06-08)
+The full handshake is implemented (ported from `InitOperation2021`): auth endpoint `0x0082`,
+`RESPONSE=0x10`/`SUCCESS=0x01`, extended-flags chunked framing, unencrypted.
+- `HuamiAuth` (HelioCore, tested): `04 02 00 02` + pubkey → parse remote random(16)+key(48) →
+  `sessionKey[i] = shared[i+8] ^ authKey[i]` → reply `0x05` + AES(rand,authKey) + AES(rand,session).
+- `Tools/ZeppSpike` BLE CLI + `scripts/zepp-spike.sh` (reads `KEY` from `.env`).
+
+**Run it (wear strap, Zepp closed):** `./scripts/zepp-spike.sh` → success prints "✅ AUTH OK".
+
+**Iterate live if it stalls:** confirm the negotiated MTU is large enough for the 52-byte
+pubkey in one chunk; check extended-flags vs not; whether the strap needs Zepp fully
+disconnected. The verbose `→/←` byte trace shows exactly where it stops.
+
+**After auth works → Phase 2 starts:** the encrypted-payload path (seqNo+CRC32+AES,
+`messageKey = sessionKey ^ writeHandle`) then the actual HRV/resting-HR fetch commands.
 
 ## Step 1 — Confirm the proprietary service exists on this device (~15 min)
 Run the inspector we already have; it discovers **all** services (`discoverServices(nil)`):

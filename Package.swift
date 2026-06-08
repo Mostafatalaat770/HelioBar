@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .executable(name: "HelioBar", targets: ["HelioBar"]),
         .executable(name: "HelioBLEInspector", targets: ["HelioBLEInspector"]),
+        .executable(name: "ZeppSpike", targets: ["ZeppSpike"]),
     ],
     dependencies: [
         .package(path: "HelioCore"),
@@ -29,6 +30,14 @@ let package = Package(
         .executableTarget(
             name: "HelioBLEInspector",
             path: "Tools/HelioBLEInspector"
+        ),
+        .executableTarget(
+            name: "ZeppSpike",
+            dependencies: ["HelioCore"],
+            path: "Tools/ZeppSpike",
+            // Spike CLI: CoreBluetooth delegate callbacks fight Swift 6 actor
+            // isolation; v5 mode keeps this throwaway tool simple.
+            swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]
 )
